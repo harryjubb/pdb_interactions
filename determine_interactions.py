@@ -8,6 +8,8 @@ import simplejson as json
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB import NeighborSearch
 
+from config import PDB_RESIDUE_TYPES_BY_RESIDUE
+
 LEVEL_MAP = {
     'A': 'atom',
     'R': 'residue',
@@ -27,6 +29,11 @@ PDB_RCSB_ASM_REGEX = PDB_REGEX + r'\.pdb([0-9]+)'
 PDB_REGEX = re.compile(PDB_REGEX)
 PDB_BIOMOL_REGEX = re.compile(PDB_BIOMOL_REGEX)
 PDB_RCSB_ASM_REGEX = re.compile(PDB_RCSB_ASM_REGEX)
+
+
+def cap(string, char=','):
+    '''Pad the beginning and end of string with a character.'''
+    return '{}{}{}'.format(char, string, char)
 
 if __name__ == '__main__':
 
@@ -124,6 +131,10 @@ into account the first model.
 
                 entity1, entity2 = entities
 
+                # NO SELFIES
+                if (entity1 is entity2) or (entity1 == entity2):
+                    continue
+
                 id1 = entity1.get_full_id()
                 id2 = entity2.get_full_id()
 
@@ -131,21 +142,22 @@ into account the first model.
                     res1 = entity1.get_parent()
                     res2 = entity2.get_parent()
 
-                    res1 = res1.resname
-                    res2 = res2.resname
+                    res1 = res1.resname.strip()
+                    res2 = res2.resname.strip()
 
-                    entity1 = ','.join([id1[2], str(id1[3][1]) + id1[3][2].strip() + '`' +  res1, entity1.name])
-                    entity2 = ','.join([id2[2], str(id2[3][1]) + id2[3][2].strip() + '`' +  res2, entity2.name])
+                    entity1 = cap(','.join([id1[2], str(id1[3][1]) + id1[3][2].strip() + '`' + res1, entity1.name]))
+                    entity2 = cap(','.join([id2[2], str(id2[3][1]) + id2[3][2].strip() + '`' + res2, entity2.name]))
 
                 elif interaction_level == 'R':
-                    entity1 = ','.join([id1[2], str(id1[3][1]) + id1[3][2].strip() + '`' +  entity1.resname])
-                    entity2 = ','.join([id2[2], str(id2[3][1]) + id2[3][2].strip() + '`' +  entity2.resname])
+                    entity1 = cap(','.join([id1[2], str(id1[3][1]) + id1[3][2].strip() + '`' + entity1.resname.strip()]))
+                    entity2 = cap(','.join([id2[2], str(id2[3][1]) + id2[3][2].strip() + '`' + entity2.resname.strip()]))
 
 
                 elif interaction_level == 'C':
-                    entity1 = entity1.id
-                    entity2 = entity2.id
+                    entity1 = cap(entity1.id)
+                    entity2 = cap(entity2.id)
 
+                # ADD INTERACTING ENTITY TO LIST OF INTERACTORS
                 if entity1 not in interactions:
                     interactions[entity1] = []
 
@@ -163,18 +175,40 @@ into account the first model.
 
             logging.info('Organisation complete for {}s.'.format(LEVEL_MAP[interaction_level]))
 
-            logging.info('Writing JSON for {}s...'.format(LEVEL_MAP[interaction_level]))
+            logging.info('Constructing JSON for {}s...'.format(LEVEL_MAP[interaction_level]))
 
-            pairs_json = {
+            json_output = {
                 'input': INPUT_FILE,
                 'pdb': PDB,
                 'biomol_id': BIOMOL_ID,
                 'level': LEVEL_MAP[interaction_level],
-                'residue_interactions': interactions
+                'interactions': interactions
             }
 
+            # TYPE RESIDUES IF POSSIBLE
+            if interaction_level in 'AR' and PDB_RESIDUE_TYPES_BY_RESIDUE:
+
+                logging.info('Typing residues for {} output...'.format(LEVEL_MAP[interaction_level]))
+
+                json_output['residue_types'] = {}
+
+                for entity in json_output['interactions']:
+
+                    resname = None
+
+                    if interaction_level == 'A':
+                        resname = entity.split(',')[-3].split('`')[1]
+                    if interaction_level == 'R':
+                        resname = entity.split(',')[-2].split('`')[1]
+
+                    if resname:
+                        json_output['residue_types'][entity] = PDB_RESIDUE_TYPES_BY_RESIDUE[resname]
+
+            # WRITE OUT JSON OUTPUT
+            logging.info('Writing JSON for {}s...'.format(LEVEL_MAP[interaction_level]))
+
             with open('.'.join([INPUT_FILE_SPLITEXT, LEVEL_MAP[interaction_level], 'interactions', 'json']), 'wb') as fo:
-                json.dump(pairs_json, fo)
+                json.dump(json_output, fo)
 
             logging.info('JSON output written for {}s.'.format(LEVEL_MAP[interaction_level]))
 
