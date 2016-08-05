@@ -53,7 +53,7 @@ into account the first model.
     parser.add_argument('-i', '--interacting', type=float,
                         default=5.0, help='Distance cutoff for interactions.')
     parser.add_argument('-o', '--outputs', type=str,
-                        default='cr', help='Granularity of output: string'
+                        default='cr', help='Granularity of output: string '
                         'including letters "c" for chain level, "r" for '
                         'residue level, "a" for atom level.')
     parser.add_argument('-v', '--verbose',
