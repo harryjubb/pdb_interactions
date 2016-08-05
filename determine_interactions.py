@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import logging
 import os
 import re
@@ -56,6 +57,16 @@ into account the first model.
                         default='cr', help='Granularity of output: string '
                         'including letters "c" for chain level, "r" for '
                         'residue level, "a" for atom level.')
+    parser.add_argument('-tf', '--type-filter', type=str,
+                        default='*', help='Filter which types of residue are '
+                        'included in atom and residue level calculations. '
+                        'Will consider all interactions made between residues '
+                        'of that/those type(s), and other entities, e.g., '
+                        'filtering by \'dna\' would include DNA-protein '
+                        'interactions. \n'
+                        'Options are: * for all, or: peptide, peptide_like, '
+                        'dna, rna, saccharide, non_polymer, water. Seperate '
+                        'multiple residue types with ')
     parser.add_argument('-v', '--verbose',
                         action='store_true', help='Be chatty.')
 
@@ -66,6 +77,7 @@ into account the first model.
     INPUT_FILE_SPLITEXT = os.path.splitext(INPUT_FILE)[0]
     INPUT_FILENAME = os.path.split(INPUT_FILE)[1]
     INTERACTION_THRESHOLD = args.interacting
+    TYPE_FILTER = args.type_filter
     OUTPUTS = args.outputs.upper()
 
     # LOGGING
@@ -117,14 +129,17 @@ into account the first model.
 
         if interaction_level in OUTPUTS:
 
-            logging.info('Calculating interactions for {}s...'.format(LEVEL_MAP[interaction_level]))
+            logging.info('Calculating interactions for {}s...'.format(
+                LEVEL_MAP[interaction_level]))
 
             pairs = neighborsearch.search_all(INTERACTION_THRESHOLD,
                                               level=interaction_level)
 
-            logging.info('Search complete for {}s.'.format(LEVEL_MAP[interaction_level]))
+            logging.info('Search complete for {}s.'.format(
+                LEVEL_MAP[interaction_level]))
 
-            logging.info('Organising interactions for {}s...'.format(LEVEL_MAP[interaction_level]))
+            logging.info('Organising interactions for {}s...'.format(
+                LEVEL_MAP[interaction_level]))
             interactions = {}
 
             for entities in pairs:
@@ -145,13 +160,16 @@ into account the first model.
                     res1 = res1.resname.strip()
                     res2 = res2.resname.strip()
 
-                    entity1 = cap(','.join([id1[2], str(id1[3][1]) + id1[3][2].strip() + '`' + res1, entity1.name]))
-                    entity2 = cap(','.join([id2[2], str(id2[3][1]) + id2[3][2].strip() + '`' + res2, entity2.name]))
+                    entity1 = cap(','.join(
+                        [id1[2], str(id1[3][1]) + id1[3][2].strip() + '`' + res1, entity1.name]))
+                    entity2 = cap(','.join(
+                        [id2[2], str(id2[3][1]) + id2[3][2].strip() + '`' + res2, entity2.name]))
 
                 elif interaction_level == 'R':
-                    entity1 = cap(','.join([id1[2], str(id1[3][1]) + id1[3][2].strip() + '`' + entity1.resname.strip()]))
-                    entity2 = cap(','.join([id2[2], str(id2[3][1]) + id2[3][2].strip() + '`' + entity2.resname.strip()]))
-
+                    entity1 = cap(','.join(
+                        [id1[2], str(id1[3][1]) + id1[3][2].strip() + '`' + entity1.resname.strip()]))
+                    entity2 = cap(','.join(
+                        [id2[2], str(id2[3][1]) + id2[3][2].strip() + '`' + entity2.resname.strip()]))
 
                 elif interaction_level == 'C':
                     entity1 = cap(entity1.id)
@@ -173,9 +191,11 @@ into account the first model.
             for entity in interactions:
                 interactions[entity] = sorted(interactions)
 
-            logging.info('Organisation complete for {}s.'.format(LEVEL_MAP[interaction_level]))
+            logging.info('Organisation complete for {}s.'.format(
+                LEVEL_MAP[interaction_level]))
 
-            logging.info('Constructing JSON for {}s...'.format(LEVEL_MAP[interaction_level]))
+            logging.info('Constructing JSON for {}s...'.format(
+                LEVEL_MAP[interaction_level]))
 
             json_output = {
                 'input': INPUT_FILE,
@@ -188,7 +208,8 @@ into account the first model.
             # TYPE RESIDUES IF POSSIBLE
             if interaction_level in 'AR' and PDB_RESIDUE_TYPES_BY_RESIDUE:
 
-                logging.info('Typing residues for {} output...'.format(LEVEL_MAP[interaction_level]))
+                logging.info('Typing residues for {} output...'.format(
+                    LEVEL_MAP[interaction_level]))
 
                 json_output['residue_types'] = {}
 
@@ -202,15 +223,53 @@ into account the first model.
                         resname = entity.split(',')[-2].split('`')[1]
 
                     if resname:
-                        json_output['residue_types'][entity] = PDB_RESIDUE_TYPES_BY_RESIDUE[resname]
+
+                        restype = None
+
+                        try:
+                            restype = PDB_RESIDUE_TYPES_BY_RESIDUE[resname]
+                        except:
+                            logging.warn('Could not type residue: {}'.format(entity))
+
+                        json_output['residue_types'][
+                            entity] = restype
+
+            # TYPE FILTER
+            if TYPE_FILTER != '*' and not PDB_RESIDUE_TYPES_BY_RESIDUE:
+                logging.warn('Not applying type filtering, because PDB '
+                             'residue typing data is not available. '
+                             'See https://github.com/harryjubb/pdb_interactions#residue-typing for information.')
+
+            if TYPE_FILTER != '*' and interaction_level in 'AR' and PDB_RESIDUE_TYPES_BY_RESIDUE:
+
+                logging.info('Filtering interactions by residue type for {} output...'.format(
+                    LEVEL_MAP[interaction_level]))
+
+                # REMOVE INTERACTIONS NOT IN TYPE FILTER
+                json_output['interactions'] = {
+                    entity: interactors for entity, interactors in json_output['interactions'].iteritems() if
+                    json_output['residue_types'][entity] in TYPE_FILTER
+                }
+
+                # REMOVE ANY ENTITIES NOT INTERACTING FROM THE RESIDUE TYPES DICTIONARY
+                remaining_interacting_entities = set(list(itertools.chain(
+                    *([entity] + interactors for entity, interactors in json_output['interactions'].iteritems())
+                )))
+
+                json_output['residue_types'] = {
+                    entity: etype for entity, etype in json_output['residue_types'].iteritems()
+                    if entity in remaining_interacting_entities
+                }
 
             # WRITE OUT JSON OUTPUT
-            logging.info('Writing JSON for {}s...'.format(LEVEL_MAP[interaction_level]))
+            logging.info('Writing JSON for {}s...'.format(
+                LEVEL_MAP[interaction_level]))
 
-            with open('.'.join([INPUT_FILE_SPLITEXT, LEVEL_MAP[interaction_level], 'interactions', 'json']), 'wb') as fo:
+            with open('.'.join([INPUT_FILE_SPLITEXT, LEVEL_MAP[interaction_level], 'interactions' if TYPE_FILTER == '*' else '_'.join(TYPE_FILTER.split()), 'json']), 'wb') as fo:
                 json.dump(json_output, fo)
 
-            logging.info('JSON output written for {}s.'.format(LEVEL_MAP[interaction_level]))
+            logging.info('JSON output written for {}s.'.format(
+                LEVEL_MAP[interaction_level]))
 
     # FINISH UP
     logging.info('Program end.')
