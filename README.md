@@ -4,7 +4,13 @@ Calculate all atom-atom, residue-residue, and chain-chain interactions in PDB fi
 
 ## Dependencies
 
+Written for Python 2.7.x. To install dependencies with [`pip`](https://pip.pypa.io/en/stable/installing/):
+
     pip install -r requirements.txt
+
+## Usage
+
+    python determine_interactions.py -h
 
 ## Residue Typing
 
