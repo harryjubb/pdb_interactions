@@ -1,6 +1,6 @@
 # PDB Interactions
 
-Calculate all atom-atom, residue-residue, and chain-chain interactions in PDB files.
+[CLI](https://en.wikipedia.org/wiki/Command-line_interface) for calculating all atom-atom, residue-residue, and chain-chain interactions in [PDB](http://www.rcsb.org/pdb/home/home.do) files.
 
 ## Dependencies
 
