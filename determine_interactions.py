@@ -140,6 +140,7 @@ into account the first model.
 
             logging.info('Organising interactions for {}s...'.format(
                 LEVEL_MAP[interaction_level]))
+
             interactions = {}
 
             for entities in pairs:
@@ -189,7 +190,7 @@ into account the first model.
                     interactions[entity2].append(entity1)
 
             for entity in interactions:
-                interactions[entity] = sorted(interactions)
+                interactions[entity] = sorted(interactions[entity])
 
             logging.info('Organisation complete for {}s.'.format(
                 LEVEL_MAP[interaction_level]))
